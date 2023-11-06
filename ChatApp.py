@@ -5,7 +5,6 @@ import threading
 import tkinter as tk
 import uuid
 from datetime import datetime
-from tkinter import Scale, Frame, Label, Button, END
 from tkinter import filedialog
 
 import requests
@@ -23,20 +22,18 @@ def resource_path(relative_path):
 class ChatApp:
     """A class to interact with OpenAI's GPT models for chat applications."""
 
-    def __init__(self, model="gpt-4", temperature=1, load_file=''):
+    def __init__(self, model="gpt-3.5-turbo", temperature=1):
         """
         Initializes the ChatApp with a specific model and optionally loads a chat history.
 
         :param model: The model to be used for chat completions, default is "gpt-4.0-turbo".
         :param temperature: The temperature to use for the chat completions.
-        :param load_file: Path to a file to load previous chat history, default is an empty string.
         """
         self.api_url = 'http://openai.fxpyramid.com/interact/'
         self.model = model
         self.temperature = temperature
         self.messages = []
-        welcome_message = """
-        Welcome to ChatApp!
+        welcome_message = """Welcome to ChatApp!
 
         Here's how to get started:
 
@@ -50,8 +47,7 @@ class ChatApp:
            - When you are ready to end your session, type `~exit` and press Enter. This will save your chat history and close the application.
 
         Enjoy your conversation!
-
-        """
+ ------ """
         self.root = tk.Tk()
         self.root.title("ChatApp")
         ico = ImageTk.PhotoImage(Image.open(resource_path('./chatapp.ico')))
@@ -61,9 +57,7 @@ class ChatApp:
 
         # Set up grid weights for resizing
         self.root.grid_columnconfigure(0, weight=1)
-        # Set up grid weights for resizing
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(4, weight=1)  # This should be the chat_frame's row
+        self.root.grid_rowconfigure(4, weight=1)  # This should be the self.chat_frame's row
 
         # Other rows should have a weight of 0 or be omitted if they shouldn't resize vertically
         self.root.grid_rowconfigure(0, weight=0)
@@ -74,85 +68,122 @@ class ChatApp:
         self.root.grid_rowconfigure(6, weight=0)
 
         # Cost Display Label
-        self.cost_label = Label(self.root, text=f"Total Cost: {self.total_cost}")
-        self.cost_label.grid(row=0, column=0, sticky="ew")
+        self.cost_label = tk.Label(self.root, text=f"Total Cost: {self.total_cost:.1f} $")
+        self.cost_label.grid(row=0, column=0, sticky="w", padx=10, pady=5)
 
         # History Frame
-        history_frame = Frame(self.root)
-        history_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
+        self.history_frame = tk.Frame(self.root)
+        self.history_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
-        history_label = Label(history_frame, text="Select History File:")
-        history_label.grid(row=0, column=0, sticky="w")
+        self.history_label = tk.Label(self.history_frame, text="Select History File:")
+        self.history_label.grid(row=0, column=0, sticky="w")
 
-        history_btn = Button(history_frame, text="Browse", command=self.load_history)
-        history_btn.grid(row=0, column=1, sticky="e")
+        self.history_btn = tk.Button(self.history_frame, text="Browse", command=self.load_history)
+        self.history_btn.grid(row=0, column=1, sticky="e")
 
         # Model Frame
-        model_frame = Frame(self.root)
-        model_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
+        self.model_frame = tk.Frame(self.root)
+        self.model_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
 
-        model_label = Label(model_frame, text="Select Model:")
-        model_label.grid(row=0, column=0, sticky="w")
+        self.model_label = tk.Label(self.model_frame, text="Select Model:")
+        self.model_label.grid(row=0, column=0, sticky="w")
 
         self.model_var = tk.StringVar(self.root)
         self.model_var.set(self.model)  # default value
 
-        model_option = tk.OptionMenu(model_frame, self.model_var, "gpt-4", "gpt-3.5-turbo")
-        model_option.grid(row=0, column=1, sticky="e")
+        self.model_option = tk.OptionMenu(self.model_frame, self.model_var, "gpt-4", "gpt-3.5-turbo")
+        self.model_option.grid(row=0, column=1, sticky="e")
 
         # Temperature Slider
-        self.temperature_scale = Scale(self.root, from_=0, to=2, resolution=0.01, orient="horizontal",
-                                       label="Temperature")
+        self.temperature_scale = tk.Scale(self.root, from_=0, to=2, resolution=0.01, orient="horizontal",
+                                          label="Temperature (randomness):")
         self.temperature_scale.set(self.temperature)
         self.temperature_scale.grid(row=3, column=0, sticky="ew", padx=10, pady=5)
 
         # Chat Frame
-        chat_frame = Frame(self.root)
-        chat_frame.grid(row=4, column=0, sticky="nsew", padx=10, pady=5)
-        chat_frame.grid_columnconfigure(0, weight=1)
-        chat_frame.grid_rowconfigure(0, weight=1)
+        self.chat_frame = tk.Frame(self.root)
+        self.chat_frame.grid(row=4, column=0, sticky="nsew", padx=10, pady=5)
+        self.chat_frame.grid_columnconfigure(0, weight=1)
+        self.chat_frame.grid_rowconfigure(0, weight=1)
 
-        self.chat_history = tk.Text(chat_frame, width=80, height=20, wrap="word")
+        self.chat_history = tk.Text(self.chat_frame, width=80, height=20, wrap="word")
         self.chat_history.grid(row=0, column=0, sticky="nsew")
         self.chat_history.config(state="disabled")
 
-        scrollbar = tk.Scrollbar(chat_frame, command=self.chat_history.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.chat_history['yscrollcommand'] = scrollbar.set
+        self.scrollbar = tk.Scrollbar(self.chat_frame, command=self.chat_history.yview)
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
+        self.chat_history['yscrollcommand'] = self.scrollbar.set
 
         # User Input
-        self.user_input = tk.Entry(self.root)
-        self.user_input.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
+        self.user_input = tk.Text(self.root, width=80, height=8)
+        self.user_input.grid(row=5, column=0, sticky="ew", padx=10, pady=10)
         self.user_input.bind("<Return>", self.send_message)
+        self.user_input.bind("<Shift-Return>", self.insert_newline)
+
+        # Creating a scrollbar for the user input Text widget
+        self.user_input_scrollbar = tk.Scrollbar(self.root, command=self.user_input.yview)
+        # Placing the scrollbar on the grid; it should be next to the user_input Text field
+        self.user_input_scrollbar.grid(row=5, column=1, sticky="ns")
+
+        # Linking the scrollbar with the user_input Text widget
+        self.user_input['yscrollcommand'] = self.user_input_scrollbar.set
 
         # Button Frame
-        button_frame = tk.Frame(self.root)
-        button_frame.grid(row=6, column=0, sticky="ew", padx=10, pady=5)
-        button_frame.grid_columnconfigure(1, weight=1)  # This will push the send button to the right
+        self.button_frame = tk.Frame(self.root)
+        self.button_frame.grid(row=6, column=0, sticky="ew", padx=10, pady=5)
+        self.button_frame.grid_columnconfigure(1, weight=1)  # This will push the send button to the right
 
         # Prepare Button (remains unchanged on the left)
-        self.prepare_button = tk.Button(button_frame, text="Prepare", command=self.prepare_message, width=7)
+        self.prepare_button = tk.Button(self.button_frame, text="Prepare", command=self.prepare_message, width=7)
         self.prepare_button.grid(row=0, column=1, padx=5, sticky="w")  # Aligns to the left
 
         # Role Selection Frame (remains unchanged next to the prepare button)
-        role_frame = tk.Frame(button_frame)
-        role_frame.grid(row=0, column=0, sticky="w",
-                        padx=5)  # Aligns to the left, in the same column as the prepare button
+        self.role_frame = tk.Frame(self.button_frame)
+        self.role_frame.grid(row=0, column=0, sticky="w", padx=5)  # Aligns to the left, same column to prepare button
 
-        role_label = tk.Label(role_frame, text="Select Role:")
-        role_label.grid(row=0, column=0, sticky="w")
+        self.role_label = tk.Label(self.role_frame, text="Select Role:")
+        self.role_label.grid(row=0, column=0, sticky="w")
 
         self.role_var = tk.StringVar(self.root)
         self.role_var.set("user")  # default value
 
-        role_option = tk.OptionMenu(role_frame, self.role_var, "user", "system")
-        role_option.grid(row=0, column=1, sticky="w")
+        self.role_option = tk.OptionMenu(self.role_frame, self.role_var, "user", "system")
+        self.role_option.grid(row=0, column=1, sticky="w")
 
         # Send Button (move to the right side)
-        self.send_button = tk.Button(button_frame, text="Send", command=self.send_message, width=7)
-        self.send_button.grid(row=0, column=1, sticky="e")  # Now aligns to the right due to column weight
+        self.save_button = tk.Button(self.button_frame, text="Save", command=self.save, width=7)
+        self.save_button.grid(row=0, column=1, padx=5, sticky="e")  # Now aligns to the right due to column weight
 
-        self.update_chat_history(welcome_message, "Program")
+        # Send Button (move to the right side)
+        self.send_button = tk.Button(self.button_frame, text="Send", command=self.send_message, width=7)
+        self.send_button.grid(row=0, column=2, sticky="e")  # Now aligns to the right due to column weight
+
+        self.history_btn.bind("<Enter>", lambda e, btn=self.history_btn: self.on_enter(btn))
+        self.history_btn.bind("<Leave>", lambda e, btn=self.history_btn: self.on_leave(btn))
+
+        self.prepare_button.bind("<Enter>", lambda e, btn=self.prepare_button: self.on_enter(btn))
+        self.prepare_button.bind("<Leave>", lambda e, btn=self.prepare_button: self.on_leave(btn))
+
+        self.save_button.bind("<Enter>", lambda e, btn=self.save_button: self.on_enter(btn))
+        self.save_button.bind("<Leave>", lambda e, btn=self.save_button: self.on_leave(btn))
+
+        self.send_button.bind("<Enter>", lambda e, btn=self.send_button: self.on_enter(btn))
+        self.send_button.bind("<Leave>", lambda e, btn=self.send_button: self.on_leave(btn))
+
+        self.update_chat_history(welcome_message, "Program", sep=False)
+
+    @staticmethod
+    def on_enter(btn):
+        btn['background'] = 'lightblue'
+
+    @staticmethod
+    def on_leave(btn):
+        btn['background'] = 'SystemButtonFace'
+
+    def insert_newline(self, event=None):
+        # Insert a newline character at the cursor's current position
+        self.user_input.insert(tk.INSERT, "\n")
+        return "break"  # Prevents the default binding from firing
 
     def save(self):
         """Saves the chat history to a JSON file."""
@@ -174,7 +205,9 @@ class ChatApp:
             data = json.load(f)
             self.messages = data
 
-        self.chat_history.delete('1.0', END)
+        self.chat_history.config(state="normal")
+        self.chat_history.delete('1.0', tk.END)
+        self.chat_history.config(state="disabled")
         for message in self.messages:
             role = message['role'].upper()
             content = message['content']
@@ -216,19 +249,19 @@ class ChatApp:
         self.root.mainloop()
 
     def prepare_message(self):
-        message = self.user_input.get()
+        message = self.user_input.get("1.0", "end-1c")
         role = self.role_var.get()
         if message:
-            self.user_input.delete(0, END)
+            self.user_input.delete("1.0", "end")
             # Just append the message with the selected role and update the GUI
             self.messages.append({"role": role, "content": message})
             self.update_chat_history(message, role)
 
     def send_message(self, event=None):
-        message = self.user_input.get()
+        message = self.user_input.get("1.0", "end-1c")
         role = self.role_var.get()
 
-        self.user_input.delete(0, END)
+        self.user_input.delete("1.0", "end")
         # Disable user input and buttons while processing
         self.disable_input_widgets()
         threading.Thread(target=self.process_message, args=(message, role)).start()
@@ -303,13 +336,13 @@ class ChatApp:
         if history_path:
             self.load(history_path)
 
-    def update_chat_history(self, message, role):
+    def update_chat_history(self, message, role, sep=True):
         if self.chat_history.winfo_exists():
             self.chat_history.config(state=tk.NORMAL)
-            self.chat_history.insert(END, f"{role.upper()}: {message}\n\n ------ \n\n ")
-            self.chat_history.yview(END)
+            self.chat_history.insert(tk.END, f"{role.upper()}: {message}\n\n" + (" ------ \n\n " if sep else ''))
+            self.chat_history.yview(tk.END)
             self.chat_history.config(state=tk.DISABLED)
 
 
 if __name__ == "__main__":
-    ChatApp(model="gpt-4", load_file='').run()
+    ChatApp(model="gpt-4").run()
