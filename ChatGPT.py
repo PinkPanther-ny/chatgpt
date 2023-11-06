@@ -4,7 +4,7 @@ import threading
 import tkinter as tk
 import uuid
 from datetime import datetime
-from tkinter import Scale, Frame, Label, Button, Listbox, END
+from tkinter import Scale, Frame, Label, Button, END
 from tkinter import filedialog
 
 import requests
@@ -86,10 +86,6 @@ class ChatApp:
             print(f"Failed to send request to {self.api_url}, save current conversation and exit!")
             os._exit(1)
 
-    def chat(self):
-        response = self._chat(input("USER: "))
-        self.pretty_print_conversation(response, 'Assistant')
-
     def save(self):
         """Saves the chat history to a JSON file."""
         try:
@@ -106,12 +102,22 @@ class ChatApp:
             self.chat_history.yview(END)
 
     def pretty_print_messages(self):
-        for message in self.messages:
-            print(f"Role: {message['role']}")
-            content_lines = message['content'].split('\n')
-            for line in content_lines:
-                print(f"    {line}")
-            print("\n" + "-" * 50 + "\n")  # Separator between messages
+        if self.chat_history.winfo_exists():
+            self.chat_history.config(state=tk.NORMAL)
+            self.chat_history.delete('1.0', END)  # Clear the current chat history in the widget
+            for message in self.messages:
+                role = message['role'].upper()
+                content = message['content']
+                self.chat_history.insert(END, f"{role}: {content}\n")
+            self.chat_history.yview(END)
+            self.chat_history.config(state=tk.DISABLED)
+        else:
+            for message in self.messages:
+                print(f"Role: {message['role']}")
+                content_lines = message['content'].split('\n')
+                for line in content_lines:
+                    print(f"    {line}")
+                print("\n" + "-" * 50 + "\n")  # Separator between messages
 
     def load(self, load_file):
         """Loads chat history from a file.
@@ -216,17 +222,26 @@ class ChatApp:
         self.temperature_scale.pack(fill=tk.X, padx=10, pady=5)
 
         # Chat Box
-        self.chat_history = Listbox(root, width=80, height=20)
+        self.chat_history = tk.Text(root, width=80, height=20, wrap=tk.WORD)
         self.chat_history.pack(padx=10, pady=5)
+        self.chat_history.config(state=tk.DISABLED)
 
         # User Input
         self.user_input = tk.Entry(root)
         self.user_input.pack(fill=tk.X, padx=10, pady=5)
         self.user_input.bind("<Return>", self.send_message)
 
+        # Frame for Send and Prepare Buttons
+        button_frame = tk.Frame(root)
+        button_frame.pack(pady=5)
+
         # Send Button
-        send_button = Button(root, text="Send", command=self.send_message)
-        send_button.pack(pady=5)
+        send_button = tk.Button(button_frame, text="Send", command=self.send_message)
+        send_button.pack(side=tk.LEFT, padx=(0, 10))  # Add padding to separate the buttons
+
+        # Prepare Button
+        prepare_button = tk.Button(button_frame, text="Prepare", command=self.prepare_message)
+        prepare_button.pack(side=tk.LEFT)
 
         # Role Selection
         role_frame = Frame(root)
@@ -240,10 +255,6 @@ class ChatApp:
 
         role_option = tk.OptionMenu(role_frame, self.role_var, "user", "system")
         role_option.pack(side=tk.RIGHT)
-
-        # Prepare Button
-        prepare_button = Button(root, text="Prepare", command=self.prepare_message)
-        prepare_button.pack(pady=5)
 
         root.mainloop()
 
@@ -266,7 +277,6 @@ class ChatApp:
 
     def handle_message(self, message, role):
         # Append the message with the selected role to the messages list
-        self.messages.append({"role": role, "content": message})
 
         # Check if it's a special command
         if message in ["~exit", "~save"]:
@@ -276,6 +286,7 @@ class ChatApp:
             else:
                 self.pretty_print_conversation("(saved)", 'System')
         else:
+            self.messages.append({"role": role, "content": message})
             # Normal message handling
             messages_payload = {
                 "messages": self.messages,
@@ -303,5 +314,7 @@ class ChatApp:
 
     def update_chat_history(self, message, role):
         if self.chat_history.winfo_exists():
-            self.chat_history.insert(END, f"{role.upper()}: {message}")
+            self.chat_history.config(state=tk.NORMAL)
+            self.chat_history.insert(END, f"{role.upper()}: {message}\n")
             self.chat_history.yview(END)
+            self.chat_history.config(state=tk.DISABLED)
