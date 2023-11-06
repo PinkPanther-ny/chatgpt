@@ -1,7 +1,11 @@
 import json
 import os
+import threading
+import tkinter as tk
 import uuid
 from datetime import datetime
+from tkinter import Scale, Frame, Label, Button, Listbox, END
+from tkinter import filedialog
 
 import requests
 
@@ -96,10 +100,10 @@ class ChatApp:
         except Exception:
             os._exit(1)
 
-    @staticmethod
-    def pretty_print_conversation(message, role):
-        print("\n" + "-" * 50 + "\n")
-        print(f"{role.upper()}: {message}\n\n" + "-" * 50 + "\n")
+    def pretty_print_conversation(self, message, role):
+        if self.chat_history.winfo_exists():
+            self.chat_history.insert(END, f"{role.upper()}: {message}")
+            self.chat_history.yview(END)
 
     def pretty_print_messages(self):
         for message in self.messages:
@@ -177,5 +181,127 @@ class ChatApp:
             return formatted_now + str(uuid.uuid4()) + ".json"
 
     def run(self):
-        while True:
-            self.chat()
+        self.build_gui()
+
+    def build_gui(self):
+        root = tk.Tk()
+        root.title("ChatApp")
+
+        # Frame for History Selection
+        history_frame = Frame(root)
+        history_frame.pack(padx=10, pady=5)
+
+        history_label = Label(history_frame, text="Select History File:")
+        history_label.pack(side=tk.LEFT)
+
+        history_btn = Button(history_frame, text="Browse", command=self.load_history)
+        history_btn.pack(side=tk.RIGHT)
+
+        # Frame for Model Selection
+        model_frame = Frame(root)
+        model_frame.pack(padx=10, pady=5)
+
+        model_label = Label(model_frame, text="Select Model:")
+        model_label.pack(side=tk.LEFT)
+
+        self.model_var = tk.StringVar(root)
+        self.model_var.set(self.model)  # default value
+
+        model_option = tk.OptionMenu(model_frame, self.model_var, "gpt-4", "gpt-3.5-turbo")
+        model_option.pack(side=tk.RIGHT)
+
+        # Temperature Slider
+        self.temperature_scale = Scale(root, from_=0, to=2, resolution=0.01, orient=tk.HORIZONTAL, label="Temperature")
+        self.temperature_scale.set(self.temperature)  # default value
+        self.temperature_scale.pack(fill=tk.X, padx=10, pady=5)
+
+        # Chat Box
+        self.chat_history = Listbox(root, width=80, height=20)
+        self.chat_history.pack(padx=10, pady=5)
+
+        # User Input
+        self.user_input = tk.Entry(root)
+        self.user_input.pack(fill=tk.X, padx=10, pady=5)
+        self.user_input.bind("<Return>", self.send_message)
+
+        # Send Button
+        send_button = Button(root, text="Send", command=self.send_message)
+        send_button.pack(pady=5)
+
+        # Role Selection
+        role_frame = Frame(root)
+        role_frame.pack(padx=10, pady=5)
+
+        role_label = Label(role_frame, text="Select Role:")
+        role_label.pack(side=tk.LEFT)
+
+        self.role_var = tk.StringVar(root)
+        self.role_var.set("user")  # default value
+
+        role_option = tk.OptionMenu(role_frame, self.role_var, "user", "system")
+        role_option.pack(side=tk.RIGHT)
+
+        # Prepare Button
+        prepare_button = Button(root, text="Prepare", command=self.prepare_message)
+        prepare_button.pack(pady=5)
+
+        root.mainloop()
+
+    def prepare_message(self):
+        message = self.user_input.get()
+        role = self.role_var.get()
+        if message:
+            self.user_input.delete(0, END)
+            # Just append the message with the selected role and update the GUI
+            self.messages.append({"role": role, "content": message})
+            self.update_chat_history(message, role)
+
+    def send_message(self, event=None):
+        message = self.user_input.get()
+        role = self.role_var.get()
+        if message:
+            self.user_input.delete(0, END)
+            self.update_chat_history(message, role)
+            threading.Thread(target=self.handle_message, args=(message, role)).start()
+
+    def handle_message(self, message, role):
+        # Append the message with the selected role to the messages list
+        self.messages.append({"role": role, "content": message})
+
+        # Check if it's a special command
+        if message in ["~exit", "~save"]:
+            response = self._chat(message)
+            if message == "~exit":
+                self.pretty_print_conversation("Session ended.", 'System')
+            else:
+                self.pretty_print_conversation("(saved)", 'System')
+        else:
+            # Normal message handling
+            messages_payload = {
+                "messages": self.messages,
+                "temperature": self.temperature,
+                "model": self.model,
+            }
+            # Send the payload to the API and get the response
+            response = requests.post(self.api_url, json=messages_payload)
+            if response.status_code == 200:
+                data = response.json()
+                # Append the assistant's response to the messages list
+                self.messages.append({"role": "assistant", "content": data['response']})
+                # Update the chat history in the GUI with the assistant's response
+                self.update_chat_history(data['response'], 'Assistant')
+            else:
+                # Handle the error case as before
+                self.pretty_print_conversation(f"Failed to get a response, status code: {response.status_code}",
+                                               'System')
+
+    def load_history(self):
+        history_path = filedialog.askopenfilename(initialdir="./history", title="Select file",
+                                                  filetypes=(("json files", "*.json"), ("all files", "*.*")))
+        if history_path:
+            self.load(history_path)
+
+    def update_chat_history(self, message, role):
+        if self.chat_history.winfo_exists():
+            self.chat_history.insert(END, f"{role.upper()}: {message}")
+            self.chat_history.yview(END)
