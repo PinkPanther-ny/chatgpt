@@ -57,35 +57,6 @@ class ChatApp:
             else:
                 print(f"The file '{load_file}' does not exist. Starting a new conversation.")
 
-    def _chat(self, message):
-        """
-        Handles a chat message, saves or exits if special commands are used.
-
-        :param message: The message from the user.
-        :return: The response from the model.
-        """
-        if message == "~exit":
-            self.save()
-            os._exit(1)
-        elif message == "~save":
-            self.save()
-            return "(saved)"
-        self.messages.append({"role": "user", "content": message})
-        messages_payload = {
-            "messages": self.messages,
-            "temperature": self.temperature,
-            "model": self.model,
-        }
-        response = requests.post(self.api_url, json=messages_payload)
-        if response.status_code == 200:
-            data = response.json()
-            self.messages.append({"role": "assistant", "content": data['response']})
-            return data['response']
-        else:
-            self.save()
-            print(f"Failed to send request to {self.api_url}, save current conversation and exit!")
-            os._exit(1)
-
     def save(self):
         """Saves the chat history to a JSON file."""
         try:
@@ -272,28 +243,37 @@ class ChatApp:
         role = self.role_var.get()
         if message:
             self.user_input.delete(0, END)
-            self.update_chat_history(message, role)
-            threading.Thread(target=self.handle_message, args=(message, role)).start()
+            threading.Thread(target=self.process_message, args=(message, role)).start()
 
-    def handle_message(self, message, role):
-        # Append the message with the selected role to the messages list
+    def process_message(self, message, role):
+        """
+        Processes a chat message, including special commands and normal chat.
 
-        # Check if it's a special command
-        if message in ["~exit", "~save"]:
-            response = self._chat(message)
-            if message == "~exit":
-                self.pretty_print_conversation("Session ended.", 'System')
-            else:
-                self.pretty_print_conversation("(saved)", 'System')
-        else:
-            self.messages.append({"role": role, "content": message})
-            # Normal message handling
+        :param message: The message from the user.
+        :param role: The role of the message sender.
+        """
+        # Handle special commands first
+        if message == "~exit":
+            self.save()
+            self.pretty_print_conversation("Session ended.", 'System')
+            os._exit(1)
+        elif message == "~save":
+            self.save()
+            self.pretty_print_conversation("(saved)", 'System')
+            return
+
+        # Add message to the history
+        self.messages.append({"role": role, "content": message})
+        self.update_chat_history(message, role)  # Update the chat history in the GUI with the user's message
+
+        # If the message is not a special command, continue with normal processing
+        if role == "user":
+            # Normal message handling, send the payload to the API and get the response
             messages_payload = {
                 "messages": self.messages,
                 "temperature": self.temperature,
                 "model": self.model,
             }
-            # Send the payload to the API and get the response
             response = requests.post(self.api_url, json=messages_payload)
             if response.status_code == 200:
                 data = response.json()
