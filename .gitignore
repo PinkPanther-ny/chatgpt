@@ -1,4 +1,6 @@
-history
+history/
+models/
+deprecated/
 tmp
 *.log
 .idea
