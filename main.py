@@ -1,9 +1,12 @@
 from ChatGPT import ChatApp
-app = ChatApp(model="gpt-3.5-turbo")
+
+app = ChatApp(model="gpt-4", load_file='')
+
+
 def main():
     while True:
-        res = app.chat(input())
-        print(res)
+        app.chat()
+
 
 if __name__ == "__main__":
     main()
