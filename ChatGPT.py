@@ -79,22 +79,16 @@ class ChatApp:
             return data['response']
         else:
             self.save()
-            print(f"Failed to send request to {self.api_url}, save current conversation!")
-            return "(saved)"
+            print(f"Failed to send request to {self.api_url}, save current conversation and exit!")
+            os._exit(1)
 
     def chat(self):
         response = self._chat(input("USER: "))
         self.pretty_print_conversation(response, 'Assistant')
 
-
     def save(self):
         """Saves the chat history to a JSON file."""
         try:
-            # ts = time.time()
-            # filename_prefix = self.messages[0]['content'][0:30]
-            # filename_prefix = re.sub('[^0-9a-zA-Z]+', '-', f"{filename_prefix}_{ts}")
-            # with open(f"models/chat_model_{filename_prefix}.json", "w") as outfile:
-            #     outfile.write(json_object)
             fn = self.get_file_name()
             print(f"Saving to 'history/{fn}'")
             with open(f"history/{fn}", "w", encoding='utf-8') as outfile:
@@ -114,7 +108,6 @@ class ChatApp:
             for line in content_lines:
                 print(f"    {line}")
             print("\n" + "-" * 50 + "\n")  # Separator between messages
-
 
     def load(self, load_file):
         """Loads chat history from a file.
@@ -182,3 +175,7 @@ class ChatApp:
             return formatted_now + data['response']
         else:
             return formatted_now + str(uuid.uuid4()) + ".json"
+
+    def run(self):
+        while True:
+            self.chat()
